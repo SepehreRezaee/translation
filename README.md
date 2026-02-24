@@ -58,6 +58,15 @@ docker compose up --build
 - `VERBOSE_LOGS=true`: show all levels (`DEBUG`, `INFO`, `WARNING`, `ERROR`)
 - `VERBOSE_LOGS=false`: show `ERROR` level only
 
+### Gemma3 compatibility note
+
+- This project uses `google/translategemma-4b-it` (`gemma3` architecture).
+- If you see: `model type gemma3 ... Transformers does not recognize this architecture`, run:
+```bash
+pip install --upgrade --upgrade-strategy eager -r requirements.txt
+```
+- `TRUST_REMOTE_CODE=true` is enabled by default for compatibility.
+
 ## 4. API usage
 
 Health:

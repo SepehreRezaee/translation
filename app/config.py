@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     gpu_memory_utilization: float = 0.92
     enforce_eager: bool = False
     swap_space: float = 4.0
-    trust_remote_code: bool = False
+    trust_remote_code: bool = True
 
     default_temperature: float = 0.0
     default_top_p: float = 0.95

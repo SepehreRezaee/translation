@@ -12,7 +12,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TENSOR_PARALLEL_SIZE=1 \
     DTYPE=bfloat16 \
     MAX_MODEL_LEN=4096 \
-    GPU_MEMORY_UTILIZATION=0.92
+    GPU_MEMORY_UTILIZATION=0.92 \
+    TRUST_REMOTE_CODE=true
 
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt

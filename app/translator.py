@@ -1,11 +1,13 @@
+import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 
 from .config import Settings
 from .schemas import TranslationItem, TranslationRequest, TranslationResponse
+
+logger = logging.getLogger(__name__)
 
 
 class TranslatorEngine:
@@ -14,11 +16,6 @@ class TranslatorEngine:
         self.model_path = Path(settings.model_path).resolve()
         self._validate_model_path()
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            str(self.model_path),
-            trust_remote_code=settings.trust_remote_code,
-            local_files_only=True,
-        )
         self.llm = LLM(
             model=str(self.model_path),
             tokenizer=str(self.model_path),
@@ -30,6 +27,7 @@ class TranslatorEngine:
             swap_space=settings.swap_space,
             trust_remote_code=settings.trust_remote_code,
         )
+        self.tokenizer = self._load_tokenizer()
         self.model_name = settings.model_display_name
 
     def _validate_model_path(self) -> None:
@@ -42,6 +40,36 @@ class TranslatorEngine:
             raise FileNotFoundError(
                 f"Missing config.json in {self.model_path}. This directory is not a valid Hugging Face model snapshot."
             )
+
+    def _load_tokenizer(self) -> Any:
+        # Prefer vLLM tokenizer to avoid architecture mismatches in older transformers versions.
+        if hasattr(self.llm, "get_tokenizer"):
+            try:
+                return self.llm.get_tokenizer()
+            except Exception as exc:
+                logger.warning("vLLM tokenizer retrieval failed, falling back to transformers: %s", exc)
+
+        from transformers import AutoTokenizer
+
+        trust_values = [self.settings.trust_remote_code]
+        if not self.settings.trust_remote_code:
+            trust_values.append(True)
+
+        last_error: Optional[Exception] = None
+        for trust_value in trust_values:
+            try:
+                return AutoTokenizer.from_pretrained(
+                    str(self.model_path),
+                    trust_remote_code=trust_value,
+                    local_files_only=True,
+                )
+            except Exception as exc:
+                last_error = exc
+
+        raise RuntimeError(
+            "Tokenizer load failed. Ensure 'transformers' supports Gemma3, "
+            "or set TRUST_REMOTE_CODE=true, then restart the service."
+        ) from last_error
 
     def _build_system_prompt(
         self,
