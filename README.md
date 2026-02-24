@@ -2,7 +2,7 @@
 
 Production-ready multilingual translation service that:
 - uses display name `Sharifsetup-Translator` in API responses
-- downloads `google/translategemma-4b-it` once into `./models/translate-gemma`
+- downloads `google/translategemma-4b-it` once into `./models/sharifsetup-translate`
 - embeds that local model folder into the Docker image
 - serves many-to-many translation offline at runtime (no model download at startup)
 
@@ -16,7 +16,7 @@ source .venv/bin/activate
 pip install --upgrade pip huggingface-hub
 python scripts/download_model.py \
   --model-id google/translategemma-4b-it \
-  --output-dir models/translate-gemma \
+  --output-dir models/sharifsetup-translate \
   --hf-token "$HF_TOKEN"
 ```
 
@@ -39,7 +39,7 @@ So the local model snapshot is inside the final image.
 ```bash
 docker run --gpus all --rm \
   -p 8000:8000 \
-  -e MODEL_PATH=/app/models/translate-gemma \
+  -e MODEL_PATH=/app/models/sharifsetup-translate \
   -e MODEL_DISPLAY_NAME=Sharifsetup-Translator \
   -e VERBOSE_LOGS=false \
   -e HF_HUB_OFFLINE=1 \

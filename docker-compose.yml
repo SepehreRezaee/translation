@@ -9,7 +9,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      MODEL_PATH: /app/models/translate-gemma
+      MODEL_PATH: /app/models/sharifsetup-translate
       MODEL_DISPLAY_NAME: Sharifsetup-Translator
       VERBOSE_LOGS: "false"
       TENSOR_PARALLEL_SIZE: "1"

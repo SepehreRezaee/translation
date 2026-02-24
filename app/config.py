@@ -12,7 +12,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    model_path: str = "/app/models/translate-gemma"
+    model_path: str = "/app/models/sharifsetup-translate"
     model_display_name: str = "Sharifsetup-Translator"
     verbose_logs: bool = False
     tensor_parallel_size: int = 1

@@ -1,5 +1,5 @@
 MODEL_ID ?= google/translategemma-4b-it
-MODEL_DIR ?= models/translate-gemma
+MODEL_DIR ?= models/sharifsetup-translate
 IMAGE ?= gemma-translator:offline
 
 .PHONY: download-model build run up
@@ -11,7 +11,7 @@ build:
 	docker build -t "$(IMAGE)" .
 
 run:
-	docker run --gpus all --rm -p 8000:8000 -e MODEL_PATH=/app/models/translate-gemma -e MODEL_DISPLAY_NAME=Sharifsetup-Translator -e VERBOSE_LOGS="$${VERBOSE_LOGS:-false}" -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1 "$(IMAGE)"
+	docker run --gpus all --rm -p 8000:8000 -e MODEL_PATH=/app/models/sharifsetup-translate -e MODEL_DISPLAY_NAME=Sharifsetup-Translator -e VERBOSE_LOGS="$${VERBOSE_LOGS:-false}" -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1 "$(IMAGE)"
 
 up:
 	docker compose up --build

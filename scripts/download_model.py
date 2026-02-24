@@ -17,7 +17,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-dir",
-        default="models/translate-gemma",
+        default="models/sharifsetup-translate",
         help="Directory where model files will be stored.",
     )
     parser.add_argument(
