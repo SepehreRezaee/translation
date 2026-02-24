@@ -11,6 +11,7 @@ services:
     environment:
       MODEL_PATH: /app/models/translate-gemma
       MODEL_DISPLAY_NAME: Sharifsetup-Translator
+      VERBOSE_LOGS: "false"
       TENSOR_PARALLEL_SIZE: "1"
       DTYPE: bfloat16
       MAX_MODEL_LEN: "4096"

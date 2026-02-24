@@ -8,6 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TRANSFORMERS_OFFLINE=1 \
     MODEL_PATH=/app/models/translate-gemma \
     MODEL_DISPLAY_NAME=Sharifsetup-Translator \
+    VERBOSE_LOGS=false \
     TENSOR_PARALLEL_SIZE=1 \
     DTYPE=bfloat16 \
     MAX_MODEL_LEN=4096 \
@@ -19,7 +20,8 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY app /app/app
 COPY scripts /app/scripts
 COPY models /app/models
+RUN chmod +x /app/scripts/start.sh
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["/app/scripts/start.sh"]

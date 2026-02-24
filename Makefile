@@ -11,7 +11,7 @@ build:
 	docker build -t "$(IMAGE)" .
 
 run:
-	docker run --gpus all --rm -p 8000:8000 -e MODEL_PATH=/app/models/translate-gemma -e MODEL_DISPLAY_NAME=Sharifsetup-Translator -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1 "$(IMAGE)"
+	docker run --gpus all --rm -p 8000:8000 -e MODEL_PATH=/app/models/translate-gemma -e MODEL_DISPLAY_NAME=Sharifsetup-Translator -e VERBOSE_LOGS="$${VERBOSE_LOGS:-false}" -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1 "$(IMAGE)"
 
 up:
 	docker compose up --build

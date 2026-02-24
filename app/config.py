@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     model_path: str = "/app/models/translate-gemma"
     model_display_name: str = "Sharifsetup-Translator"
+    verbose_logs: bool = False
     tensor_parallel_size: int = 1
     dtype: str = "bfloat16"
     max_model_len: int = 4096

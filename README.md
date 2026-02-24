@@ -41,6 +41,7 @@ docker run --gpus all --rm \
   -p 8000:8000 \
   -e MODEL_PATH=/app/models/translate-gemma \
   -e MODEL_DISPLAY_NAME=Sharifsetup-Translator \
+  -e VERBOSE_LOGS=false \
   -e HF_HUB_OFFLINE=1 \
   -e TRANSFORMERS_OFFLINE=1 \
   gemma-translator:offline
@@ -51,6 +52,11 @@ Or with compose:
 ```bash
 docker compose up --build
 ```
+
+### Logging flag
+
+- `VERBOSE_LOGS=true`: show all levels (`DEBUG`, `INFO`, `WARNING`, `ERROR`)
+- `VERBOSE_LOGS=false`: show `ERROR` level only
 
 ## 4. API usage
 

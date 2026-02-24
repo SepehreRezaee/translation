@@ -1,11 +1,15 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
 from .config import get_settings
+from .logging_config import configure_logging
 from .schemas import HealthResponse, TranslationRequest, TranslationResponse
 from .translator import TranslatorEngine
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -18,6 +22,7 @@ async def lifespan(app: FastAPI):
 
 
 settings = get_settings()
+configure_logging(settings.verbose_logs)
 app = FastAPI(
     title=settings.api_title,
     version=settings.api_version,
@@ -43,4 +48,5 @@ async def translate(request: Request, payload: TranslationRequest) -> Translatio
     try:
         return await run_in_threadpool(translator.translate, payload)
     except Exception as exc:
+        logger.exception("Translation request failed.")
         raise HTTPException(status_code=500, detail=f"Translation failed: {exc}") from exc
