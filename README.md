@@ -1,20 +1,21 @@
-# Gemma Offline Translation API (`vLLM` + `FastAPI`)
+# Sharifsetup-Translator Offline API (`vLLM` + `FastAPI`)
 
 Production-ready multilingual translation service that:
-- downloads a Gemma model once into `./models/translate-gemma`
+- uses display name `Sharifsetup-Translator` in API responses
+- downloads `google/translategemma-4b-it` once into `./models/translate-gemma`
 - embeds that local model folder into the Docker image
 - serves many-to-many translation offline at runtime (no model download at startup)
 
 ## 1. Download model once (local storage)
 
-Gemma models may require Hugging Face access approval + token.
+TranslateGemma may require Hugging Face access approval + token.
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip huggingface-hub
 python scripts/download_model.py \
-  --model-id google/gemma-2-9b-it \
+  --model-id google/translategemma-4b-it \
   --output-dir models/translate-gemma \
   --hf-token "$HF_TOKEN"
 ```
@@ -39,6 +40,7 @@ So the local model snapshot is inside the final image.
 docker run --gpus all --rm \
   -p 8000:8000 \
   -e MODEL_PATH=/app/models/translate-gemma \
+  -e MODEL_DISPLAY_NAME=Sharifsetup-Translator \
   -e HF_HUB_OFFLINE=1 \
   -e TRANSFORMERS_OFFLINE=1 \
   gemma-translator:offline
@@ -56,6 +58,9 @@ Health:
 ```bash
 curl http://localhost:8000/health
 ```
+
+Expected model display:
+`"model": "Sharifsetup-Translator"`
 
 Translate (many-to-many):
 ```bash
@@ -82,4 +87,3 @@ You can translate any language pair by changing `source_language` and `target_la
   - `TENSOR_PARALLEL_SIZE`
   - `MAX_MODEL_LEN`
   - `GPU_MEMORY_UTILIZATION`
-

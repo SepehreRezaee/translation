@@ -28,11 +28,12 @@ app = FastAPI(
 @app.get("/health", response_model=HealthResponse)
 async def health(request: Request) -> HealthResponse:
     translator = getattr(request.app.state, "translator", None)
-    model_path = request.app.state.settings.model_path
+    settings = request.app.state.settings
     return HealthResponse(
         status="ok" if translator is not None else "degraded",
         model_loaded=translator is not None,
-        model_path=model_path,
+        model=translator.model_name if translator is not None else settings.model_display_name,
+        model_path=settings.model_path,
     )
 
 
@@ -43,4 +44,3 @@ async def translate(request: Request, payload: TranslationRequest) -> Translatio
         return await run_in_threadpool(translator.translate, payload)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Translation failed: {exc}") from exc
-

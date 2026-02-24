@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -31,7 +30,7 @@ class TranslatorEngine:
             swap_space=settings.swap_space,
             trust_remote_code=settings.trust_remote_code,
         )
-        self.model_name = self._read_model_name()
+        self.model_name = settings.model_display_name
 
     def _validate_model_path(self) -> None:
         if not self.model_path.exists():
@@ -43,18 +42,6 @@ class TranslatorEngine:
             raise FileNotFoundError(
                 f"Missing config.json in {self.model_path}. This directory is not a valid Hugging Face model snapshot."
             )
-
-    def _read_model_name(self) -> str:
-        config_path = self.model_path / "config.json"
-        try:
-            with config_path.open("r", encoding="utf-8") as f:
-                config = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            return self.model_path.name
-
-        if isinstance(config.get("_name_or_path"), str) and config["_name_or_path"]:
-            return config["_name_or_path"]
-        return self.model_path.name
 
     def _build_system_prompt(
         self,
@@ -180,4 +167,3 @@ class TranslatorEngine:
             target_language=payload.target_language,
             translations=items,
         )
-

@@ -8,11 +8,11 @@ from huggingface_hub import snapshot_download
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Download a Gemma model snapshot locally for offline Docker deployment."
+        description="Download a model snapshot for Sharifsetup-Translator offline deployment."
     )
     parser.add_argument(
         "--model-id",
-        default="google/gemma-2-9b-it",
+        default="google/translategemma-4b-it",
         help="Hugging Face model ID.",
     )
     parser.add_argument(
@@ -34,6 +34,11 @@ def parse_args() -> argparse.Namespace:
         "--force",
         action="store_true",
         help="Force re-download even if model already exists.",
+    )
+    parser.add_argument(
+        "--display-name",
+        default="Sharifsetup-Translator",
+        help="Model display name stored in metadata.",
     )
     return parser.parse_args()
 
@@ -63,6 +68,7 @@ def main() -> None:
     print(f"[done] Snapshot stored at: {snapshot_path}")
 
     metadata = {
+        "display_name": args.display_name,
         "model_id": args.model_id,
         "revision": args.revision,
         "downloaded_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -74,4 +80,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

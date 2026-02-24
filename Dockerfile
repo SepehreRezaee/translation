@@ -7,6 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1 \
     MODEL_PATH=/app/models/translate-gemma \
+    MODEL_DISPLAY_NAME=Sharifsetup-Translator \
     TENSOR_PARALLEL_SIZE=1 \
     DTYPE=bfloat16 \
     MAX_MODEL_LEN=4096 \
@@ -22,4 +23,3 @@ COPY models /app/models
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
-

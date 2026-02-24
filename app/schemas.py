@@ -56,5 +56,5 @@ class TranslationResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     model_loaded: bool
+    model: str
     model_path: str
-

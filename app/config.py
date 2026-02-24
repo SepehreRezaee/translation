@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     )
 
     model_path: str = "/app/models/translate-gemma"
+    model_display_name: str = "Sharifsetup-Translator"
     tensor_parallel_size: int = 1
     dtype: str = "bfloat16"
     max_model_len: int = 4096
@@ -26,11 +27,10 @@ class Settings(BaseSettings):
     default_max_new_tokens: int = 512
     default_repetition_penalty: float = 1.0
 
-    api_title: str = "Gemma Offline Translation API"
+    api_title: str = "Sharifsetup-Translator API"
     api_version: str = "1.0.0"
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-
