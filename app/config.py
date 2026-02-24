@@ -12,13 +12,15 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    model_path: str = "/app/models/sharifsetup-translate"
+    model_path: str = "./models/sharifsetup-translate"
     model_display_name: str = "Sharifsetup-Translator"
     verbose_logs: bool = False
     model_device: str = "auto"
     dtype: str = "bfloat16"
     max_model_len: int = 4096
     trust_remote_code: bool = True
+    use_fast_processor: bool = False
+    fix_mistral_regex: bool = True
 
     default_temperature: float = 0.0
     default_top_p: float = 0.95

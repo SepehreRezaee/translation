@@ -42,6 +42,8 @@ docker run --gpus all --rm \
   -e MODEL_PATH=/app/models/sharifsetup-translate \
   -e MODEL_DISPLAY_NAME=Sharifsetup-Translator \
   -e MODEL_DEVICE=auto \
+  -e USE_FAST_PROCESSOR=false \
+  -e FIX_MISTRAL_REGEX=true \
   -e VERBOSE_LOGS=false \
   -e HF_HUB_OFFLINE=1 \
   -e TRANSFORMERS_OFFLINE=1 \
@@ -58,6 +60,11 @@ docker compose up --build
 
 - `VERBOSE_LOGS=true`: show all levels (`DEBUG`, `INFO`, `WARNING`, `ERROR`)
 - `VERBOSE_LOGS=false`: show `ERROR` level only
+
+### Processor/tokenizer flags
+
+- `USE_FAST_PROCESSOR=false`: keep the model's slow processor behavior.
+- `FIX_MISTRAL_REGEX=true`: apply tokenizer regex compatibility fix during load.
 
 ### Gemma3 compatibility note
 
@@ -84,11 +91,11 @@ curl -X POST http://localhost:8000/translate/text \
   -H "Content-Type: application/json" \
   -d '{
     "content": "Hello, how are you?",
-    "language": ["fr (French)", "de"]
+    "language": "fr (French)"
   }'
 ```
 
-`language` accepts list values in these formats:
+`language` accepts a single string value in these formats:
 - `fr`
 - `French`
 - `fr (French)`
@@ -102,16 +109,15 @@ If your text contains control characters or raw newlines, you can use form data:
 ```bash
 curl -X POST http://localhost:8000/translate/text \
   -F "language=fr (French)" \
-  -F "language=de" \
   -F "content=Hello
 Line 2"
 ```
+This is the same `language` string format used by `/translate/file`.
 
 Translate uploaded file (`/translate/file`):
 ```bash
 curl -X POST http://localhost:8000/translate/file \
   -F "language=fr (French)" \
-  -F "language=de" \
   -F "file=@./sample.txt"
 ```
 

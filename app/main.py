@@ -4,7 +4,7 @@ from io import BytesIO
 import json
 import logging
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import Any, List, Optional, Tuple
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from pydantic import ValidationError
@@ -86,32 +86,18 @@ def _extract_text_from_upload(filename: str, content: bytes) -> str:
     return text
 
 
-def _normalize_languages(language_input: Any) -> List[Tuple[str, str]]:
-    raw_values: List[str] = []
-    if isinstance(language_input, str):
-        candidates = [part.strip() for part in language_input.split(",")]
-        raw_values.extend([item for item in candidates if item])
-    elif isinstance(language_input, list):
-        for item in language_input:
-            if isinstance(item, str):
-                candidates = [part.strip() for part in item.split(",")]
-                raw_values.extend([candidate for candidate in candidates if candidate])
-    else:
-        raise ValueError("language must be a string or list of strings.")
+def _normalize_target_language(language_input: Any) -> Tuple[str, str]:
+    if isinstance(language_input, list):
+        values = [item for item in language_input if isinstance(item, str) and item.strip()]
+        if len(values) != 1:
+            raise ValueError("language must be a single string value.")
+        language_input = values[0]
 
-    if not raw_values:
-        raise ValueError("language must contain at least one value.")
+    if not isinstance(language_input, str):
+        raise ValueError("language must be a string.")
 
-    normalized: List[Tuple[str, str]] = []
-    seen = set()
-    for value in raw_values:
-        code, _ = normalize_language(value)
-        formatted = format_language(code)
-        if code not in seen:
-            seen.add(code)
-            normalized.append((code, formatted))
-
-    return normalized
+    code, _ = normalize_language(language_input)
+    return code, format_language(code)
 
 
 async def _parse_text_translation_request(request: Request) -> TextTranslationRequest:
@@ -146,12 +132,22 @@ async def _parse_text_translation_request(request: Request) -> TextTranslationRe
                     ),
                 ) from exc
 
+    return _validate_text_translation_payload(payload_data)
+
+
+def _validate_text_translation_payload(payload_data: dict[str, Any]) -> TextTranslationRequest:
     if "text" in payload_data and "content" not in payload_data:
         payload_data["content"] = payload_data.get("text")
     if "target_language" in payload_data and "language" not in payload_data:
         payload_data["language"] = payload_data.get("target_language")
-    if isinstance(payload_data.get("language"), str):
-        payload_data["language"] = [payload_data["language"]]
+    if isinstance(payload_data.get("language"), list):
+        values = [
+            item
+            for item in payload_data["language"]
+            if isinstance(item, str) and item.strip()
+        ]
+        if len(values) == 1:
+            payload_data["language"] = values[0]
 
     try:
         return TextTranslationRequest.model_validate(payload_data)
@@ -184,11 +180,7 @@ async def health(request: Request) -> HealthResponse:
                         "required": ["content", "language"],
                         "properties": {
                             "content": {"type": "string", "example": "Hello world"},
-                            "language": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "example": ["fr (French)", "de"],
-                            },
+                            "language": {"type": "string", "example": "fr (French)"},
                         },
                     }
                 },
@@ -198,10 +190,7 @@ async def health(request: Request) -> HealthResponse:
                         "required": ["content", "language"],
                         "properties": {
                             "content": {"type": "string"},
-                            "language": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                            },
+                            "language": {"type": "string"},
                         },
                     }
                 },
@@ -209,23 +198,33 @@ async def health(request: Request) -> HealthResponse:
         }
     },
 )
-async def translate_text(request: Request) -> TextTranslationResponse:
+async def translate_text(
+    request: Request,
+    content: Optional[str] = Form(default=None),
+    language: Optional[str] = Form(default=None),
+) -> TextTranslationResponse:
     translator = request.app.state.translator
     try:
-        payload = await _parse_text_translation_request(request)
-        languages = _normalize_languages(payload.language)
-        translations: List[dict] = []
-        for target_code, target_label in languages:
-            translated_text = await run_in_threadpool(
-                translator.translate_single_text, payload.content, target_code
-            )
-            translations.append(
+        if content is not None or language is not None:
+            payload = _validate_text_translation_payload(
                 {
-                    "target_lang_code": target_code,
-                    "language": target_label,
-                    "translated_text": translated_text,
+                    "content": content or "",
+                    "language": language or "",
                 }
             )
+        else:
+            payload = await _parse_text_translation_request(request)
+        target_code, target_label = _normalize_target_language(payload.language)
+        translated_text = await run_in_threadpool(
+            translator.translate_single_text, payload.content, target_code
+        )
+        translations: List[dict] = [
+            {
+                "target_lang_code": target_code,
+                "language": target_label,
+                "translated_text": translated_text,
+            }
+        ]
         return TextTranslationResponse(
             model=translator.model_name,
             source_language="auto",
@@ -245,27 +244,25 @@ async def translate_text(request: Request) -> TextTranslationResponse:
 async def translate_file(
     request: Request,
     file: UploadFile = File(...),
-    language: List[str] = Form(...),
+    language: str = Form(...),
 ) -> FileTranslationResponse:
     translator = request.app.state.translator
     filename = file.filename or "uploaded_file"
 
     try:
-        languages = _normalize_languages(language)
+        target_code, target_label = _normalize_target_language(language)
         file_bytes = await file.read()
         text = _extract_text_from_upload(filename, file_bytes)
-        translations: List[dict] = []
-        for target_code, target_label in languages:
-            translated_text = await run_in_threadpool(
-                translator.translate_single_text, text, target_code
-            )
-            translations.append(
-                {
-                    "target_lang_code": target_code,
-                    "language": target_label,
-                    "translated_text": translated_text,
-                }
-            )
+        translated_text = await run_in_threadpool(
+            translator.translate_single_text, text, target_code
+        )
+        translations: List[dict] = [
+            {
+                "target_lang_code": target_code,
+                "language": target_label,
+                "translated_text": translated_text,
+            }
+        ]
         return FileTranslationResponse(
             model=translator.model_name,
             source_language="auto",

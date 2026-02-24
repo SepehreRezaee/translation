@@ -55,12 +55,10 @@ class TranslationResponse(BaseModel):
 
 class TextTranslationRequest(BaseModel):
     content: str = Field(..., min_length=1, description="Input text to translate.")
-    language: List[str] = Field(
+    language: str = Field(
         ...,
-        min_length=1,
-        max_length=64,
         description=(
-            "List of target languages. Each item can be code, name, or formatted value "
+            "Target language as code, name, or formatted value "
             "(e.g., 'fr', 'French', 'fr (French)')."
         ),
     )
@@ -74,12 +72,10 @@ class TextTranslationRequest(BaseModel):
 
     @field_validator("language")
     @classmethod
-    def ensure_languages(cls, value: List[str]) -> List[str]:
-        if not value:
-            raise ValueError("language must contain at least one target language.")
-        normalized = [item.strip() for item in value if item and item.strip()]
+    def ensure_language(cls, value: str) -> str:
+        normalized = value.strip()
         if not normalized:
-            raise ValueError("language must contain non-empty values.")
+            raise ValueError("language must be a non-empty string.")
         return normalized
 
 
