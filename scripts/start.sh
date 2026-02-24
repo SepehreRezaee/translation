@@ -1,7 +1,14 @@
 #!/usr/bin/env sh
 set -eu
 
-VERBOSE_LOGS_VALUE="$(printf "%s" "${VERBOSE_LOGS:-false}" | tr '[:upper:]' '[:lower:]')"
+: "${HF_HUB_OFFLINE:=1}"
+: "${TRANSFORMERS_OFFLINE:=1}"
+: "${VERBOSE_LOGS:=false}"
+
+VERBOSE_LOGS="$(printf "%s" "${VERBOSE_LOGS}" | tr '[:upper:]' '[:lower:]')"
+export HF_HUB_OFFLINE TRANSFORMERS_OFFLINE VERBOSE_LOGS
+
+VERBOSE_LOGS_VALUE="${VERBOSE_LOGS}"
 LOG_LEVEL="error"
 
 case "${VERBOSE_LOGS_VALUE}" in
@@ -15,4 +22,3 @@ exec uvicorn app.main:app \
   --port 8000 \
   --workers 1 \
   --log-level "${LOG_LEVEL}"
-
