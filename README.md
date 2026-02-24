@@ -1,4 +1,4 @@
-# Sharifsetup-Translator Offline API (`vLLM` + `FastAPI`)
+# Sharifsetup-Translator Offline API (`Transformers` + `FastAPI`)
 
 Production-ready multilingual translation service that:
 - uses display name `Sharifsetup-Translator` in API responses
@@ -41,6 +41,7 @@ docker run --gpus all --rm \
   -p 8000:8000 \
   -e MODEL_PATH=/app/models/sharifsetup-translate \
   -e MODEL_DISPLAY_NAME=Sharifsetup-Translator \
+  -e MODEL_DEVICE=auto \
   -e VERBOSE_LOGS=false \
   -e HF_HUB_OFFLINE=1 \
   -e TRANSFORMERS_OFFLINE=1 \
@@ -77,28 +78,58 @@ curl http://localhost:8000/health
 Expected model display:
 `"model": "Sharifsetup-Translator"`
 
-Translate (many-to-many):
+Translate text (`/translate/text`):
 ```bash
-curl -X POST http://localhost:8000/translate \
+curl -X POST http://localhost:8000/translate/text \
   -H "Content-Type: application/json" \
   -d '{
-    "source_language": "auto",
-    "target_language": "French",
-    "texts": [
-      "Hello, how are you?",
-      "Buenos dias, bienvenidos a nuestra plataforma."
-    ],
-    "preserve_formatting": true
+    "content": "Hello, how are you?",
+    "language": ["fr (French)", "de"]
   }'
 ```
 
-You can translate any language pair by changing `source_language` and `target_language` (or keeping source as `auto`).
+`language` accepts list values in these formats:
+- `fr`
+- `French`
+- `fr (French)`
+
+Each translation item in response includes:
+- `target_lang_code` (for example `fr`)
+- `language` (for example `fr (French)`)
+- `translated_text`
+
+If your text contains control characters or raw newlines, you can use form data:
+```bash
+curl -X POST http://localhost:8000/translate/text \
+  -F "language=fr (French)" \
+  -F "language=de" \
+  -F "content=Hello
+Line 2"
+```
+
+Translate uploaded file (`/translate/file`):
+```bash
+curl -X POST http://localhost:8000/translate/file \
+  -F "language=fr (French)" \
+  -F "language=de" \
+  -F "file=@./sample.txt"
+```
+
+Allowed file extensions for `/translate/file`:
+- `.pdf`
+- `.docx`
+- `.txt`
+
+The API now exposes exactly:
+- `GET /health`
+- `POST /translate/text`
+- `POST /translate/file`
 
 ## Notes for production
 
 - Requires NVIDIA GPU + NVIDIA Container Toolkit.
 - Keep `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` to guarantee offline runtime behavior.
-- For larger Gemma variants, tune:
-  - `TENSOR_PARALLEL_SIZE`
+- For larger variants, tune:
+  - `MODEL_DEVICE`
+  - `DTYPE`
   - `MAX_MODEL_LEN`
-  - `GPU_MEMORY_UTILIZATION`

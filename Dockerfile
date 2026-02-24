@@ -1,4 +1,4 @@
-FROM vllm/vllm-openai:latest
+FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
 WORKDIR /app
 
@@ -9,10 +9,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MODEL_PATH=/app/models/sharifsetup-translate \
     MODEL_DISPLAY_NAME=Sharifsetup-Translator \
     VERBOSE_LOGS=false \
-    TENSOR_PARALLEL_SIZE=1 \
+    MODEL_DEVICE=auto \
     DTYPE=bfloat16 \
     MAX_MODEL_LEN=4096 \
-    GPU_MEMORY_UTILIZATION=0.92 \
     TRUST_REMOTE_CODE=true
 
 COPY requirements.txt /app/requirements.txt

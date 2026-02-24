@@ -15,12 +15,9 @@ class Settings(BaseSettings):
     model_path: str = "/app/models/sharifsetup-translate"
     model_display_name: str = "Sharifsetup-Translator"
     verbose_logs: bool = False
-    tensor_parallel_size: int = 1
+    model_device: str = "auto"
     dtype: str = "bfloat16"
     max_model_len: int = 4096
-    gpu_memory_utilization: float = 0.92
-    enforce_eager: bool = False
-    swap_space: float = 4.0
     trust_remote_code: bool = True
 
     default_temperature: float = 0.0

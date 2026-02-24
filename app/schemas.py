@@ -53,6 +53,56 @@ class TranslationResponse(BaseModel):
     translations: List[TranslationItem]
 
 
+class TextTranslationRequest(BaseModel):
+    content: str = Field(..., min_length=1, description="Input text to translate.")
+    language: List[str] = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description=(
+            "List of target languages. Each item can be code, name, or formatted value "
+            "(e.g., 'fr', 'French', 'fr (French)')."
+        ),
+    )
+
+    @field_validator("content")
+    @classmethod
+    def ensure_text_not_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("content must contain non-whitespace characters.")
+        return value
+
+    @field_validator("language")
+    @classmethod
+    def ensure_languages(cls, value: List[str]) -> List[str]:
+        if not value:
+            raise ValueError("language must contain at least one target language.")
+        normalized = [item.strip() for item in value if item and item.strip()]
+        if not normalized:
+            raise ValueError("language must contain non-empty values.")
+        return normalized
+
+
+class LanguageTranslationItem(BaseModel):
+    target_lang_code: str
+    language: str
+    translated_text: str
+
+
+class TextTranslationResponse(BaseModel):
+    model: str
+    source_language: str
+    content: str
+    translations: List[LanguageTranslationItem]
+
+
+class FileTranslationResponse(BaseModel):
+    model: str
+    source_language: str
+    filename: str
+    translations: List[LanguageTranslationItem]
+
+
 class HealthResponse(BaseModel):
     status: str
     model_loaded: bool

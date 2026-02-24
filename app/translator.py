@@ -1,11 +1,9 @@
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-
-from vllm import LLM, SamplingParams
+from typing import Any, Dict, Optional, Tuple
 
 from .config import Settings
-from .schemas import TranslationItem, TranslationRequest, TranslationResponse
+from .languages import LANGUAGES, normalize_language
 
 logger = logging.getLogger(__name__)
 
@@ -16,19 +14,59 @@ class TranslatorEngine:
         self.model_path = Path(settings.model_path).resolve()
         self._validate_model_path()
 
-        self.llm = LLM(
-            model=str(self.model_path),
-            tokenizer=str(self.model_path),
-            tensor_parallel_size=settings.tensor_parallel_size,
-            dtype=settings.dtype,
-            max_model_len=settings.max_model_len,
-            gpu_memory_utilization=settings.gpu_memory_utilization,
-            enforce_eager=settings.enforce_eager,
-            swap_space=settings.swap_space,
-            trust_remote_code=settings.trust_remote_code,
-        )
-        self.tokenizer = self._load_tokenizer()
+        self.torch, auto_model_cls, auto_processor_cls = self._load_transformer_backends()
+        self.device = self._resolve_device(settings.model_device)
+        self.dtype = self._resolve_dtype(settings.dtype, self.device)
+
+        processor_kwargs: Dict[str, Any] = {
+            "trust_remote_code": settings.trust_remote_code,
+            "local_files_only": True,
+            "fix_mistral_regex": True,
+        }
+        try:
+            self.processor = auto_processor_cls.from_pretrained(
+                str(self.model_path), **processor_kwargs
+            )
+        except TypeError:
+            processor_kwargs.pop("fix_mistral_regex", None)
+            self.processor = auto_processor_cls.from_pretrained(
+                str(self.model_path), **processor_kwargs
+            )
+
+        model_kwargs: Dict[str, Any] = {
+            "dtype": self.dtype,
+            "trust_remote_code": settings.trust_remote_code,
+            "local_files_only": True,
+        }
+        try:
+            self.model = auto_model_cls.from_pretrained(str(self.model_path), **model_kwargs)
+        except TypeError:
+            fallback_kwargs = dict(model_kwargs)
+            fallback_kwargs["torch_dtype"] = fallback_kwargs.pop("dtype")
+            self.model = auto_model_cls.from_pretrained(str(self.model_path), **fallback_kwargs)
+
+        self.model.to(self.device)
+        self.model.eval()
         self.model_name = settings.model_display_name
+
+        logger.info(
+            "Loaded model '%s' on device '%s' with dtype '%s'.",
+            self.model_name,
+            self.device,
+            self.dtype,
+        )
+
+    @staticmethod
+    def _load_transformer_backends() -> Tuple[Any, Any, Any]:
+        try:
+            import torch
+            from transformers import AutoModelForImageTextToText, AutoProcessor
+        except Exception as exc:
+            raise RuntimeError(
+                "Missing runtime dependencies. Install with: pip install -r requirements.txt"
+            ) from exc
+
+        return torch, AutoModelForImageTextToText, AutoProcessor
 
     def _validate_model_path(self) -> None:
         if not self.model_path.exists():
@@ -41,96 +79,73 @@ class TranslatorEngine:
                 f"Missing config.json in {self.model_path}. This directory is not a valid Hugging Face model snapshot."
             )
 
-    def _load_tokenizer(self) -> Any:
-        # Prefer vLLM tokenizer to avoid architecture mismatches in older transformers versions.
-        if hasattr(self.llm, "get_tokenizer"):
-            try:
-                return self.llm.get_tokenizer()
-            except Exception as exc:
-                logger.warning("vLLM tokenizer retrieval failed, falling back to transformers: %s", exc)
+    def _resolve_device(self, model_device: str) -> str:
+        device = model_device.strip().lower()
+        if device == "auto":
+            return "cuda" if self.torch.cuda.is_available() else "cpu"
 
-        from transformers import AutoTokenizer
+        if device.startswith("cuda") and not self.torch.cuda.is_available():
+            logger.warning("CUDA requested but unavailable. Falling back to CPU.")
+            return "cpu"
 
-        trust_values = [self.settings.trust_remote_code]
-        if not self.settings.trust_remote_code:
-            trust_values.append(True)
+        return model_device
 
-        last_error: Optional[Exception] = None
-        for trust_value in trust_values:
-            try:
-                return AutoTokenizer.from_pretrained(
-                    str(self.model_path),
-                    trust_remote_code=trust_value,
-                    local_files_only=True,
-                )
-            except Exception as exc:
-                last_error = exc
+    def _resolve_dtype(self, dtype_name: str, device: str) -> Any:
+        normalized = dtype_name.strip().lower()
+        mapping = {
+            "float16": self.torch.float16,
+            "fp16": self.torch.float16,
+            "bfloat16": self.torch.bfloat16,
+            "bf16": self.torch.bfloat16,
+            "float32": self.torch.float32,
+            "fp32": self.torch.float32,
+        }
+        if normalized not in mapping:
+            raise ValueError(f"Unsupported DTYPE value: {dtype_name}")
 
-        raise RuntimeError(
-            "Tokenizer load failed. Ensure 'transformers' supports Gemma3, "
-            "or set TRUST_REMOTE_CODE=true, then restart the service."
-        ) from last_error
+        resolved = mapping[normalized]
+        if device == "cpu" and resolved in (self.torch.float16, self.torch.bfloat16):
+            logger.warning("Using float32 on CPU even though DTYPE=%s was requested.", dtype_name)
+            return self.torch.float32
+        return resolved
 
-    def _build_system_prompt(
-        self,
-        source_language: str,
-        target_language: str,
-        preserve_formatting: bool,
-        glossary: Optional[Dict[str, str]],
-    ) -> str:
-        lines = [
-            "You are a high-precision professional translator.",
-            "Return only the translated text.",
-            "Do not include explanations, transliteration, metadata, or extra notes.",
-            f"Target language: {target_language}.",
-        ]
+    @staticmethod
+    def _normalize_detected_code(code: str) -> Optional[str]:
+        normalized = code.strip().lower()
+        alias = {
+            "zh-cn": "zh",
+            "zh-tw": "zh",
+            "pt-br": "pt",
+            "iw": "he",
+        }
+        normalized = alias.get(normalized, normalized)
+        if normalized in LANGUAGES:
+            return normalized
+        if "-" in normalized:
+            prefix = normalized.split("-", 1)[0]
+            if prefix in LANGUAGES:
+                return prefix
+        return None
 
-        if source_language.strip().lower() == "auto":
-            lines.append("Detect the source language automatically.")
-        else:
-            lines.append(f"Source language: {source_language}.")
+    def _detect_source_lang_code(self, text: str) -> str:
+        try:
+            from langdetect import detect
+        except Exception:
+            return "en"
 
-        if preserve_formatting:
-            lines.append("Preserve line breaks, punctuation, and list/paragraph structure.")
+        try:
+            detected = detect(text)
+        except Exception:
+            return "en"
 
-        if glossary:
-            lines.append("Mandatory glossary mappings:")
-            for src_term, tgt_term in glossary.items():
-                lines.append(f"- {src_term} => {tgt_term}")
+        normalized = self._normalize_detected_code(detected)
+        return normalized if normalized is not None else "en"
 
-        return "\n".join(lines)
-
-    def _build_prompt(
-        self,
-        text: str,
-        source_language: str,
-        target_language: str,
-        preserve_formatting: bool,
-        glossary: Optional[Dict[str, str]],
-    ) -> str:
-        messages = [
-            {
-                "role": "system",
-                "content": self._build_system_prompt(
-                    source_language=source_language,
-                    target_language=target_language,
-                    preserve_formatting=preserve_formatting,
-                    glossary=glossary,
-                ),
-            },
-            {"role": "user", "content": text},
-        ]
-
-        if hasattr(self.tokenizer, "apply_chat_template"):
-            return self.tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True
-            )
-
-        return (
-            f"{messages[0]['content']}\n\n"
-            f"Translate this text:\n{text}\n\n"
-            "Translated text:"
-        )
+    def _generation_kwargs(self) -> Dict[str, Any]:
+        return {
+            "max_new_tokens": self.settings.default_max_new_tokens,
+            "do_sample": False,
+        }
 
     @staticmethod
     def _clean_translation(text: str) -> str:
@@ -139,59 +154,61 @@ class TranslatorEngine:
             cleaned = cleaned.strip("`").strip()
         return cleaned
 
-    def translate(self, payload: TranslationRequest) -> TranslationResponse:
-        prompts: List[str] = []
-        indexes: List[int] = []
-        translated_texts: List[str] = [""] * len(payload.texts)
-
-        for idx, text in enumerate(payload.texts):
-            if text.strip():
-                prompts.append(
-                    self._build_prompt(
-                        text=text,
-                        source_language=payload.source_language,
-                        target_language=payload.target_language,
-                        preserve_formatting=payload.preserve_formatting,
-                        glossary=payload.glossary,
-                    )
-                )
-                indexes.append(idx)
-
-        if prompts:
-            sampling_params = SamplingParams(
-                temperature=(
-                    payload.temperature
-                    if payload.temperature is not None
-                    else self.settings.default_temperature
-                ),
-                top_p=payload.top_p if payload.top_p is not None else self.settings.default_top_p,
-                max_tokens=(
-                    payload.max_new_tokens
-                    if payload.max_new_tokens is not None
-                    else self.settings.default_max_new_tokens
-                ),
-                repetition_penalty=(
-                    payload.repetition_penalty
-                    if payload.repetition_penalty is not None
-                    else self.settings.default_repetition_penalty
-                ),
-            )
-            outputs = self.llm.generate(prompts, sampling_params=sampling_params, use_tqdm=False)
-
-            for output_idx, output in enumerate(outputs):
-                original_idx = indexes[output_idx]
-                candidate = ""
-                if output.outputs:
-                    candidate = output.outputs[0].text
-                translated_texts[original_idx] = self._clean_translation(candidate)
-
-        items = [
-            TranslationItem(source_text=source, translated_text=translated)
-            for source, translated in zip(payload.texts, translated_texts)
+    def _prepare_inputs(self, text: str, source_lang_code: str, target_lang_code: str) -> Dict[str, Any]:
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "source_lang_code": source_lang_code,
+                        "target_lang_code": target_lang_code,
+                        "text": text,
+                    }
+                ],
+            }
         ]
-        return TranslationResponse(
-            model=self.model_name,
-            source_language=payload.source_language,
-            target_language=payload.target_language,
-            translations=items,
+
+        inputs = self.processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
         )
+
+        if hasattr(inputs, "to"):
+            moved = inputs.to(self.device)
+            if isinstance(moved, dict):
+                return moved
+            return dict(moved)
+
+        if isinstance(inputs, dict):
+            return {key: value.to(self.device) for key, value in inputs.items()}
+
+        raise RuntimeError("Unsupported processor output type.")
+
+    def _translate_by_codes(self, text: str, source_lang_code: str, target_lang_code: str) -> str:
+        if not text.strip():
+            return ""
+
+        inputs = self._prepare_inputs(text, source_lang_code, target_lang_code)
+        with self.torch.inference_mode():
+            generation = self.model.generate(**inputs, **self._generation_kwargs())
+
+        input_len = inputs["input_ids"].shape[1]
+        output = self.processor.decode(generation[0][input_len:], skip_special_tokens=True)
+        return self._clean_translation(output)
+
+    def translate_single_text(self, text: str, target_language: str) -> str:
+        target_code, _ = normalize_language(target_language)
+        source_code = self._detect_source_lang_code(text)
+        return self._translate_by_codes(
+            text=text,
+            source_lang_code=source_code,
+            target_lang_code=target_code,
+        )
+
+
+__all__ = ["TranslatorEngine"]
+
