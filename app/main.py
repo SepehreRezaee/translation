@@ -7,6 +7,12 @@ from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.openapi.docs import (
+    get_redoc_html,
+    get_swagger_ui_html,
+    get_swagger_ui_oauth2_redirect_html,
+)
+from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
@@ -21,6 +27,25 @@ from .schemas import (
 )
 
 logger = logging.getLogger(__name__)
+DOCS_ASSETS_URL = "/docs-assets"
+
+
+def _resolve_docs_static_dir() -> Path:
+    # Prefer repo-local vendored assets; otherwise use the FastAPI package assets.
+    bundled_assets = Path(__file__).resolve().parent / "static" / "swagger"
+    if bundled_assets.exists():
+        return bundled_assets
+
+    try:
+        import fastapi
+    except Exception as exc:
+        raise RuntimeError("FastAPI static assets are unavailable for offline docs.") from exc
+
+    package_assets = Path(fastapi.__file__).resolve().parent / "static"
+    if package_assets.exists():
+        return package_assets
+
+    raise RuntimeError("Swagger/ReDoc static assets were not found.")
 
 
 @asynccontextmanager
@@ -42,7 +67,43 @@ app = FastAPI(
     title=settings.api_title,
     version=settings.api_version,
     lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
 )
+docs_static_dir = _resolve_docs_static_dir()
+docs_favicon_exists = (docs_static_dir / "favicon.png").exists()
+app.mount(DOCS_ASSETS_URL, StaticFiles(directory=str(docs_static_dir)), name="docs-assets")
+
+
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui() -> Any:
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title} - Swagger UI",
+        oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
+        swagger_js_url=f"{DOCS_ASSETS_URL}/swagger-ui-bundle.js",
+        swagger_css_url=f"{DOCS_ASSETS_URL}/swagger-ui.css",
+        swagger_favicon_url=(
+            f"{DOCS_ASSETS_URL}/favicon.png" if docs_favicon_exists else ""
+        ),
+    )
+
+
+if app.swagger_ui_oauth2_redirect_url:
+    @app.get(app.swagger_ui_oauth2_redirect_url, include_in_schema=False)
+    async def swagger_ui_redirect() -> Any:
+        return get_swagger_ui_oauth2_redirect_html()
+
+
+@app.get("/redoc", include_in_schema=False)
+async def redoc_html() -> Any:
+    return get_redoc_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title} - ReDoc",
+        redoc_js_url=f"{DOCS_ASSETS_URL}/redoc.standalone.js",
+        with_google_fonts=False,
+        redoc_favicon_url=(f"{DOCS_ASSETS_URL}/favicon.png" if docs_favicon_exists else ""),
+    )
 
 
 def _decode_text_file(content: bytes) -> str:

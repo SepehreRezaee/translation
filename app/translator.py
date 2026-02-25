@@ -34,6 +34,7 @@ class TranslatorEngine:
         self.torch, auto_model_cls, auto_processor_cls = self._load_transformer_backends()
         self.device = self._resolve_device(settings.model_device)
         self.dtype = self._resolve_dtype(settings.dtype, self.device)
+        self._validate_cuda_runtime_support()
         self._configure_warnings()
         self.processor = self._load_processor(auto_processor_cls)
         self._force_tokenizer_regex_fix()
@@ -252,6 +253,38 @@ class TranslatorEngine:
             logger.warning("Using float32 on CPU even though DTYPE=%s was requested.", dtype_name)
             return self.torch.float32
         return resolved
+
+    def _validate_cuda_runtime_support(self) -> None:
+        if not str(self.device).lower().startswith("cuda"):
+            return
+        if not self.torch.cuda.is_available():
+            return
+
+        try:
+            if ":" in str(self.device):
+                device_index = int(str(self.device).split(":", 1)[1])
+            else:
+                device_index = self.torch.cuda.current_device()
+        except Exception:
+            device_index = 0
+
+        major, minor = self.torch.cuda.get_device_capability(device_index)
+        device_arch = f"sm_{major}{minor}"
+        supported_arches = set(self.torch.cuda.get_arch_list() or [])
+
+        if device_arch in supported_arches:
+            return
+
+        # Blackwell cards report compute capability 12.x and require newer CUDA kernels.
+        if major >= 12:
+            device_name = self.torch.cuda.get_device_name(device_index)
+            supported_text = " ".join(sorted(supported_arches)) or "unknown"
+            raise RuntimeError(
+                "PyTorch CUDA kernels are incompatible with this GPU. "
+                f"Detected '{device_name}' ({device_arch}), but this build supports: "
+                f"{supported_text}. Install a Blackwell-capable PyTorch build "
+                "(for example torch>=2.7 with CUDA 12.8)."
+            )
 
     @staticmethod
     def _normalize_detected_code(code: str) -> Optional[str]:

@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+FROM pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime
 
 WORKDIR /app
 
@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY app /app/app
 COPY scripts /app/scripts
 COPY models /app/models
+RUN python /app/scripts/download_swagger_assets.py
 RUN chmod +x /app/scripts/start.sh
 
 EXPOSE 8000

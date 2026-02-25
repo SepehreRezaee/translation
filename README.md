@@ -5,6 +5,7 @@ Production-ready multilingual translation service that:
 - downloads `google/translategemma-4b-it` once into `./models/sharifsetup-translate`
 - embeds that local model folder into the Docker image
 - serves many-to-many translation offline at runtime (no model download at startup)
+- serves Swagger/ReDoc static assets from local files so docs work fully offline
 
 ## 1. Download model once (local storage)
 
@@ -33,6 +34,12 @@ docker build -t gemma-translator:offline .
 COPY models /app/models
 ```
 So the local model snapshot is inside the final image.
+
+### Blackwell GPU support
+
+- The container base is `pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime` and `torch>=2.7.0`.
+- This is required for NVIDIA Blackwell cards (`sm_120`) such as RTX PRO 6000.
+- If you still hit CUDA arch mismatch, rebuild the image with `--no-cache` and confirm your NVIDIA driver is up to date on the host.
 
 ## 3. Run API container
 
@@ -130,6 +137,12 @@ The API now exposes exactly:
 - `GET /health`
 - `POST /translate/text`
 - `POST /translate/file`
+
+Docs UI endpoints:
+- `GET /docs`
+- `GET /redoc`
+
+Swagger/ReDoc assets are served from `/docs-assets/*` inside the app image.
 
 ## Notes for production
 
